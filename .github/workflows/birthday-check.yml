@@ -10,25 +10,105 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Call Birthday Check Function
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      
+      - name: Run Birthday Check
+        env:
+          BASE44_API_KEY: ${{ secrets.BASE44_API_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ADMIN_WHATSAPP_NUMBER: ${{ secrets.ADMIN_WHATSAPP_NUMBER }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_NUMBER: ${{ secrets.TWILIO_WHATSAPP_NUMBER }}
         run: |
-          echo "🎂 Checking birthdays..."
-          
-          response=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "Content-Type: application/json" \
-            -H "api_key: 64ca26f9c66d40f7aca255dcf8663ecf" \
-            -d '{}' \
-            "https://megabaitprivate.base44.app/api/apps/68a20f7a1cd7c118dc55744d/functions/triggerBirthdayCheck?token=birthday-check-secret-2025-mega-bait")
-          
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | sed '$d')
-          
-          echo "Status Code: $http_code"
-          echo "Response: $body"
-          
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ Birthday check completed successfully!"
-          else
-            echo "❌ Birthday check failed with status $http_code"
-            exit 1
-          fi
+          deno run --allow-net --allow-env - <<'DENO_SCRIPT'
+          import { createClient } from 'npm:@base44/sdk@0.7.1';
+
+          console.log('🎂 Starting birthday check...');
+
+          const base44 = createClient(
+            '68a20f7a1cd7c118dc55744d',
+            'kuba1500',
+            { 
+              useServiceRole: true,
+              apiKey: Deno.env.get('BASE44_API_KEY')
+            }
+          );
+
+          try {
+            const adminWhatsappNumber = Deno.env.get('ADMIN_WHATSAPP_NUMBER');
+            
+            const clients = await base44.entities.Client.list('-created_date', 1000);
+            const clientsWithBirthdays = clients.filter(c => c.birth_date);
+            
+            console.log(`📊 Found ${clientsWithBirthdays.length} clients with birth dates.`);
+
+            const today = new Date();
+            const todayMonth = today.getMonth() + 1;
+            const todayDay = today.getDate();
+
+            let approvalRequestsCreated = 0;
+
+            for (const client of clientsWithBirthdays) {
+              const birthDate = new Date(client.birth_date);
+              
+              if ((birthDate.getMonth() + 1 === todayMonth) && (birthDate.getDate() === todayDay)) {
+                console.log(`🎂 Found birthday client: ${client.full_name}`);
+                
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                
+                const allRequests = await base44.entities.ApprovalRequest.list('-created_date', 100);
+                const existingRequest = allRequests.filter(r => 
+                  r.client_id === client.id && 
+                  r.type === 'birthday_whatsapp' &&
+                  new Date(r.created_date) >= todayStart
+                );
+
+                if (existingRequest.length > 0) {
+                  console.log(`⏭️ Request already exists for ${client.full_name}`);
+                  continue;
+                }
+
+                const birthdayGreetingText = `היי ${client.full_name},\n\nכל צוות מגה בית משכנתאות רוצה לאחל לך יום הולדת שמח, מלא באושר, בריאות והצלחה!\n\nאנו מודים לך על האמון ועל שבחרת בנו ללוות אותך בתהליך המשכנתא.\n\nמאחלים לך שתגשים את כל חלומותיך, הקטנים והגדולים.\n\nבברכה חמה,\nקובי וצוות מגה בית משכנתאות`;
+                
+                const expiresAt = new Date();
+                expiresAt.setHours(expiresAt.getHours() + 12);
+
+                await base44.entities.ApprovalRequest.create({
+                  type: 'birthday_whatsapp',
+                  client_id: client.id,
+                  client_name: client.full_name,
+                  client_phone: client.phone,
+                  message_to_send: birthdayGreetingText,
+                  status: 'pending',
+                  expires_at: expiresAt.toISOString()
+                });
+                
+                console.log(`✅ Created approval request for ${client.full_name}`);
+
+                const approvalMessageToAdmin = `היי קובי, ללקוח/ה *${client.full_name}* יש יום הולדת היום! 🥳\n\nלשלוח לו/לה ברכה באופן אוטומטי?\n\n*השב "כן" כדי לשלוח.*`;
+
+                await base44.functions.invoke('sendWhatsappMessage', {
+                  to: adminWhatsappNumber,
+                  message: approvalMessageToAdmin
+                });
+                
+                approvalRequestsCreated++;
+                console.log(`📤 Sent approval request to admin for ${client.full_name}`);
+              }
+            }
+
+            console.log(`✅ Completed! Created ${approvalRequestsCreated} approval requests.`);
+            
+          } catch (error) {
+            console.error('❌ Error:', error.message);
+            Deno.exit(1);
+          }
+          DENO_SCRIPT
