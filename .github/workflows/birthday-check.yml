@@ -1,0 +1,32 @@
+name: Daily Birthday Check
+
+on:
+  schedule:
+    # Runs every day at 08:30 UTC (11:30 Israel time in winter, 10:30 in summer)
+    - cron: '30 8 * * *'
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  check-birthdays:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Call Birthday Check Function
+        run: |
+          echo "🎂 Checking birthdays..."
+          
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            "https://megabaitprivate.base44.app/api/apps/68a20f7a1cd7c118dc55744d/functions/triggerBirthdayCheck?token=birthday-check-secret-2025-mega-bait")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Status Code: $http_code"
+          echo "Response: $body"
+          
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Birthday check completed successfully!"
+          else
+            echo "❌ Birthday check failed with status $http_code"
+            exit 1
+          fi
