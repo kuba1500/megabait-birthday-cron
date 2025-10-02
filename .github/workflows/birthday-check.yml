@@ -13,32 +13,23 @@ jobs:
       - name: Call Birthday Check Function
         env:
           BASE44_API_KEY: ${{ secrets.BASE44_API_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           echo "🎂 Starting birthday check..."
-          echo "📍 Using API Key: ${BASE44_API_KEY:0:8}..." # Show first 8 chars only
           
-          echo ""
-          echo "📤 Sending request..."
-          
-          response=$(curl -v -X POST \
+          response=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Content-Type: application/json" \
             -H "api_key: $BASE44_API_KEY" \
             -d '{}' \
-            "https://megabaitprivate.base44.app/api/apps/68a20f7a1cd7c118dc55744d/functions/triggerBirthdayCheck?token=birthday-check-secret-2025-mega-bait" \
-            2>&1)
+            "https://megabaitprivate.base44.app/api/apps/68a20f7a1cd7c118dc55744d/functions/triggerBirthdayCheck?token=$CRON_SECRET")
           
-          echo ""
-          echo "📥 Full Response:"
-          echo "$response"
-          
-          echo ""
-          
-          # Extract HTTP status code
-          http_code=$(echo "$response" | grep "< HTTP" | tail -1 | awk '{print $3}')
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
           
           echo "Status Code: $http_code"
+          echo "Response Body: $body"
           
-          if [ "$http_code" = "200" ]; then
+          if [ "$http_code" -eq 200 ]; then
             echo "✅ Birthday check completed successfully!"
           else
             echo "❌ Birthday check failed with status $http_code"
