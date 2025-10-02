@@ -16,7 +16,8 @@ jobs:
           
           response=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Content-Type: application/json" \
-            -H "api_key: 68a20f7a1cd7c118dc55744d" \
+            -H "api_key: 64ca26f9c66d40f7aca255dcf8663ecf" \
+            -d '{}' \
             "https://megabaitprivate.base44.app/api/apps/68a20f7a1cd7c118dc55744d/functions/triggerBirthdayCheck?token=birthday-check-secret-2025-mega-bait")
           
           http_code=$(echo "$response" | tail -n1)
