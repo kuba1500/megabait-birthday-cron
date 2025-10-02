@@ -11,13 +11,10 @@ jobs:
     
     steps:
       - name: Call Birthday Check Function
-        env:
-          BASE44_API_KEY: ${{ secrets.BASE44_API_KEY }}
         run: |
           echo "🎂 Checking birthdays..."
           
           response=$(curl -s -w "\n%{http_code}" -X GET \
-            -H "Authorization: Bearer $BASE44_API_KEY" \
             "https://megabaitprivate.base44.app/api/apps/68a20f7a1cd7c118dc55744d/functions/triggerBirthdayCheck?token=birthday-check-secret-2025-mega-bait")
           
           http_code=$(echo "$response" | tail -n1)
