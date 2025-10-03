@@ -16,6 +16,8 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           echo "🎂 Starting birthday check..."
+          echo "📍 Using API Key: ${BASE44_API_KEY:0:8}..."
+          echo "🔑 Using Secret: ${CRON_SECRET:0:8}..."
           
           response=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Content-Type: application/json" \
@@ -26,12 +28,13 @@ jobs:
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
           
+          echo ""
           echo "Status Code: $http_code"
-          echo "Response Body: $body"
+          echo "Response: $body"
           
           if [ "$http_code" -eq 200 ]; then
             echo "✅ Birthday check completed successfully!"
           else
-            echo "❌ Birthday check failed with status $http_code"
+            echo "❌ Birthday check failed"
             exit 1
           fi
